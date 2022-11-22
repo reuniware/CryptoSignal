@@ -1,5 +1,8 @@
 package com.reunisoft.cryptosignal
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -7,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat.getSystemService
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.recyclerview.widget.DiffUtil
@@ -61,6 +65,8 @@ class CryptoSignalViewModel : ViewModel() {
 
     var isActive = true
 
+    var listOfSymbols = ArrayList<String>()
+
     fun process() {
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -68,20 +74,69 @@ class CryptoSignalViewModel : ViewModel() {
             while(isActive) {
                 val listOfCoins = ArrayList<Coin>()
 
-                var symbol = "BTCUSDT"
-                var price = request(symbol)
-                listOfCoins.add(Coin(symbol, price))
+//                if (listOfSymbols.size == 0) {
+//                    listOfSymbols = request0()
+//                }
 
-                symbol = "ETHUSDT"
-                price = request(symbol)
-                listOfCoins.add(Coin(symbol, price))
+                if (listOfSymbols.size == 0) {
+                    listOfSymbols.addAll(listOf("BTCUSDT", "ETHUSDT", "CHZUSDT"))
+                }
+
+                listOfSymbols.forEach {
+                    try {
+                        if (it.endsWith("USDT")) {
+                            val symbol = it
+                            val price = request(symbol)
+                            listOfCoins.add(Coin(symbol, price))
+                        }
+                    } catch (_: java.lang.Exception){
+                    }
+                }
 
                 currentListOfCoins.postValue(listOfCoins)
 
-                delay(500)
+                //delay(500)
             }
         }
     }
+}
+
+fun request0(): ArrayList<String> {
+
+    val listOfSymbols = ArrayList<String>()
+
+    val client2 = OkHttpClient()
+    val request2 = Request.Builder()
+        .url("https://api.binance.com/api/v3/exchangeInfo")
+        .build()
+    client2.newCall(request2).execute().use {
+        if (!it.isSuccessful) {
+            Log.d("cryptosignalviewmodel", "erreur = ${it.code}")
+        } else {
+            Log.d("cryptosignalviewmodel", "Ok")
+            val body = it.body!!.string()
+            val gson = Gson()
+
+            val typeToken = object : TypeToken<Any>() {}.type
+            val exchangeInfo = gson.fromJson<Any>(body, typeToken)
+
+            Log.d("exchangeInfo", exchangeInfo.toString())
+            val a = (exchangeInfo as com.google.gson.internal.LinkedTreeMap<*, *>).entries.toTypedArray()[4]
+            Log.d("exchangeInfo", a.toString())
+            val b = a.value
+            Log.d("exchangeInfo b.toString", b.toString())
+
+            val symbolInfo = gson.fromJson<Any>(b.toString(), typeToken)
+            Log.d("symbolInfo", symbolInfo.toString())
+
+            (symbolInfo as ArrayList<*>).forEach {
+                val symbol = (it as com.google.gson.internal.LinkedTreeMap<*, *>).entries.toTypedArray()[0]
+                Log.d("symbolInfo", symbol.value as String)
+                listOfSymbols.add(symbol.value as String)
+            }
+        }
+    }
+    return listOfSymbols
 }
 
 fun request(symbol: String): String {
