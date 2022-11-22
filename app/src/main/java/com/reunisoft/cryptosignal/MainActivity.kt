@@ -1,34 +1,22 @@
 package com.reunisoft.cryptosignal
 
-import android.app.Application
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.os.ResultReceiver
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.lifecycle.LifecycleObserver
-import androidx.lifecycle.LifecycleOwner
+import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import retrofit2.Retrofit
-import retrofit2.create
-import retrofit2.http.GET
-import retrofit2.http.Path
 
 
 var cryptoSignalViewModel = CryptoSignalViewModel()
@@ -43,7 +31,7 @@ class MainActivity : AppCompatActivity() {
         val recyclerView: RecyclerView? = findViewById(R.id.recycler_view)
         recyclerView?.adapter = coinAdapter
 
-        cryptoSignalViewModel.getCurrentList().observe(this) {
+        cryptoSignalViewModel.getCurrentListOfCoins().observe(this) {
             Log.d("cryptoSignalViewModel", "will update displayed data")
             coinAdapter.submitList(it)
         }
@@ -63,52 +51,78 @@ class MainActivity : AppCompatActivity() {
 class CryptoSignalViewModel : ViewModel() {
     //private val BASE_URL = "https://www.google.com"
     //private val retrofit = Retrofit.Builder().baseUrl(BASE_URL).build()
-    private var currentList = MutableLiveData<List<Coin>>()
+    private var currentListOfCoins = MutableLiveData<ArrayList<Coin>>()
 
-    fun getCurrentList(): MutableLiveData<List<Coin>> {
-        return currentList
+    fun getCurrentListOfCoins(): MutableLiveData<ArrayList<Coin>> {
+        return currentListOfCoins
     }
+
+    //https://api.binance.com/api/v1/exchangeInfo
+
+    var isActive = true
 
     fun process() {
 
         CoroutineScope(Dispatchers.IO).launch {
-            val client = OkHttpClient()
-            val request = Request.Builder()
-                .url("https://api.coingecko.com/api/v3/coins/list")
-                .build()
-            client.newCall(request).execute().use {
-                if (!it.isSuccessful) {
-                    Log.d("cryptosignalviewmodel", "erreur = ${it.code}")
-                } else {
-                    Log.d("cryptosignalviewmodel", "Ok")
-                    val body = it.body!!.string()
-                    val gson = Gson()
 
-                    val typeToken = object : TypeToken<List<Coin>>() {}.type
-                    val coins = gson.fromJson<List<Coin>>(body, typeToken)
+            while(isActive) {
+                val listOfCoins = ArrayList<Coin>()
 
-//                    coins.forEach {  c ->
-//                        Log.d("coin", "${c.id} ${c.name} ${c.symbol}")
-//                    }
+                var symbol = "BTCUSDT"
+                var price = request(symbol)
+                listOfCoins.add(Coin(symbol, price))
 
-                    //currentList = MutableLiveData(coins)
+                symbol = "ETHUSDT"
+                price = request(symbol)
+                listOfCoins.add(Coin(symbol, price))
 
-                    currentList.postValue(coins)
-                }
+                currentListOfCoins.postValue(listOfCoins)
+
+                delay(500)
             }
         }
     }
 }
 
-class Coin(
-    @SerializedName("id")
-    val id: String = "",
-    @SerializedName("symbol")
-    val symbol: String = "",
-    @SerializedName("name")
-    val name: String = ""
-)
+fun request(symbol: String): String {
+    val client = OkHttpClient()
+    val request = Request.Builder()
+        .url("https://api.binance.com/api/v3/klines?symbol=$symbol&interval=1m&limit=1")
+        .build()
+    client.newCall(request).execute().use {
+        if (!it.isSuccessful) {
+            Log.d("cryptosignalviewmodel", "erreur = ${it.code}")
+        } else {
+            Log.d("cryptosignalviewmodel", "Ok")
 
+            val body = it.body!!.string()
+            val gson = Gson()
+
+            val typeToken = object : TypeToken<Any>() {}.type
+            val coins = gson.fromJson<Any>(body, typeToken)
+
+            val coin = coins as ArrayList<*>
+            val coin0 = coin[0]
+            val open = (coin0 as java.util.ArrayList<*>)[1]
+            val high = (coin0 as java.util.ArrayList<*>)[2]
+            val low = (coin0 as java.util.ArrayList<*>)[3]
+            val close = (coin0 as java.util.ArrayList<*>)[4]
+
+            Log.d("open",  open.toString())
+            Log.d("high",  high.toString())
+            Log.d("low",  low.toString())
+            Log.d("close",  close.toString())
+
+            return close.toString()
+        }
+    }
+    return ""
+}
+
+class Coin(symbol_: String, price_: String) {
+    val symbol : String = symbol_
+    val price : String = price_
+}
 
 class CoinsAdapter(private val onClick: (Coin) -> Unit) : ListAdapter<Coin, CoinViewHolder>(CoinDiffCallback) {
 
@@ -124,9 +138,8 @@ class CoinsAdapter(private val onClick: (Coin) -> Unit) : ListAdapter<Coin, Coin
 }
 
 class CoinViewHolder(itemView: View, val onClick: (Coin) -> Unit) : RecyclerView.ViewHolder(itemView) {
-    private val coinIdView: TextView = itemView.findViewById(R.id.coin_id)
-    private val coinNameView: TextView = itemView.findViewById(R.id.coin_name)
-    private val coinSymbolView: TextView = itemView.findViewById(R.id.coin_symbol)
+    private val coinSymbol: TextView = itemView.findViewById(R.id.coin_symbol)
+    private val coinPrice: TextView = itemView.findViewById(R.id.coin_price)
     private var currentCoin: Coin? = null
 
     init {
@@ -139,9 +152,8 @@ class CoinViewHolder(itemView: View, val onClick: (Coin) -> Unit) : RecyclerView
 
     fun bind(coin: Coin) {
         currentCoin = coin
-        coinIdView.text = coin.id
-        coinNameView.text = coin.name
-        coinSymbolView.text = coin.symbol
+        coinSymbol.text = coin.symbol
+        coinPrice.text = coin.price
     }
 }
 
@@ -151,6 +163,6 @@ object CoinDiffCallback : DiffUtil.ItemCallback<Coin>() {
     }
 
     override fun areContentsTheSame(oldItem: Coin, newItem: Coin): Boolean {
-        return oldItem.id == newItem.id
+        return oldItem.symbol == newItem.symbol
     }
 }
