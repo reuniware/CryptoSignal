@@ -78,7 +78,7 @@ class CryptoSignalViewModel : ViewModel() {
 //                }
 
                 if (listOfSymbols.size == 0) {
-                    listOfSymbols.addAll(listOf("BTCUSDT", "ETHUSDT", "CHZUSDT"))
+                    listOfSymbols.addAll(listOf("BTCUSDT", "ETHUSDT", "LTCUSDT", "BNXUSDT", "TWTUSDT", "AUTOUSDT", "KEYUSDT", "DOCKUSDT", "DREPUSDT", "CELOUSDT", "QIUSDT", "LEVERUSDT"))
                 }
 
                 listOfSymbols.forEach {
@@ -86,7 +86,7 @@ class CryptoSignalViewModel : ViewModel() {
                         if (it.endsWith("USDT")) {
                             val symbol = it
                             val price = request(symbol)
-                            listOfCoins.add(Coin(symbol, price))
+                            listOfCoins.add(Coin(symbol.replace("USDT", "/USDT"), price))
                         }
                     } catch (_: java.lang.Exception){
                     }
